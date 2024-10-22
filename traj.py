@@ -597,7 +597,7 @@ centroid_projected = trajectory_gdf_projected.geometry.centroid.iloc[0]
 
 # Convert the centroid back to the geographic CRS
 centroid = gpd.GeoSeries([centroid_projected], crs="EPSG:32633").to_crs(epsg=4326).iloc[0]
-
+†
 # Plot the trajectory on a map using folium
 def plot_trajectory(trajectory_gdf, centroid):
     # Create a folium map centered at the centroid
