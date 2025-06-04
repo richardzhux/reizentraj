@@ -91,7 +91,7 @@ heatmap_map
 
 
 
-
+"""
 # STATES VISITED SECTOR may not work now?
 
 from datetime import datetime
@@ -198,7 +198,6 @@ import json
 from geopy.distance import geodesic
 
 def haversine(coord1, coord2):
-    """Calculate the great-circle distance between two points on the Earth surface."""
     return geodesic(coord1, coord2).kilometers
 
 def calculate_total_distance(locations):
@@ -246,7 +245,6 @@ from geopy.distance import geodesic
 from datetime import datetime
 
 def haversine(coord1, coord2):
-    """Calculate the great-circle distance between two points on the Earth surface."""
     return geodesic(coord1, coord2).kilometers
 
 def calculate_distances_by_month(locations):
@@ -597,7 +595,7 @@ centroid_projected = trajectory_gdf_projected.geometry.centroid.iloc[0]
 
 # Convert the centroid back to the geographic CRS
 centroid = gpd.GeoSeries([centroid_projected], crs="EPSG:32633").to_crs(epsg=4326).iloc[0]
-†
+
 # Plot the trajectory on a map using folium
 def plot_trajectory(trajectory_gdf, centroid):
     # Create a folium map centered at the centroid
@@ -613,3 +611,4 @@ def plot_trajectory(trajectory_gdf, centroid):
 # Plot and display the map
 map_ = plot_trajectory(trajectory_gdf, centroid)
 map_
+"""
