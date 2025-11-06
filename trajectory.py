@@ -390,13 +390,7 @@ HTML_TEMPLATE = Template(
           <option value="30000">500 min/s</option>
           <option value="60000">1000 min/s</option>
         </select>
-        <button
-          id="palette-toggle"
-          class="ghost"
-          type="button"
-          aria-pressed="false"
-          aria-label="Switch to rainbow palette"
-        >
+        <button id="palette-toggle" class="ghost" type="button" aria-pressed="false" aria-label="Toggle rainbow palette">
           🌈
         </button>
         <select id="basemap-select" class="pill-select" aria-label="Basemap style">
@@ -887,11 +881,8 @@ HTML_TEMPLATE = Template(
         explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
         paletteToggle.classList.toggle('active', state.rainbow);
         paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
-        paletteToggle.textContent = state.rainbow ? 'Classic palette' : '🌈';
-        paletteToggle.setAttribute(
-          'aria-label',
-          state.rainbow ? 'Switch to classic palette' : 'Switch to rainbow palette'
-        );
+        paletteToggle.textContent = '🌈';
+        paletteToggle.setAttribute('aria-label', 'Toggle rainbow palette');
         document.body.classList.toggle('rainbow-active', state.rainbow);
         autoSizeSelect(speedSelect);
         autoSizeSelect(basemapSelect);
