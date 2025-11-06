@@ -111,13 +111,32 @@ HTML_TEMPLATE = Template(
         font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         background: #0f172a;
         color: #e2e8f0;
+        --timeline-gradient: linear-gradient(
+          90deg,
+          #ef4444 0%,
+          #f97316 16%,
+          #facc15 32%,
+          #22c55e 48%,
+          #0ea5e9 64%,
+          #6366f1 80%,
+          #8b5cf6 100%
+        );
       }
-      #controls {
+      .floating-controls {
         position: absolute;
         z-index: 10;
         top: 16px;
         left: 50%;
         transform: translateX(-50%);
+      }
+      .floating-controls.custom-position {
+        transform: translate(0, 0);
+      }
+      body.controls-dragging {
+        user-select: none;
+        cursor: grabbing;
+      }
+      #controls {
         background: rgba(15, 23, 42, 0.85);
         backdrop-filter: blur(8px);
         border-radius: 12px;
@@ -125,9 +144,33 @@ HTML_TEMPLATE = Template(
         padding: 18px 22px;
         width: min(720px, 94vw);
       }
+      #controls .controls-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+        cursor: grab;
+      }
+      #controls .controls-header.dragging {
+        cursor: grabbing;
+      }
+      #controls .controls-header h1 {
+        font-size: 1.15rem;
+        margin: 0;
+        letter-spacing: 0.02em;
+        flex: 1 1 auto;
+      }
+      #controls .collapse-button {
+        background: rgba(148, 163, 184, 0.12);
+        color: #e2e8f0;
+        padding: 6px 14px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
       #controls h1 {
         font-size: 1.15rem;
-        margin: 0 0 12px;
+        margin: 0;
         letter-spacing: 0.02em;
       }
       #controls button {
@@ -160,6 +203,24 @@ HTML_TEMPLATE = Template(
       #controls button.ghost:hover {
         transform: translateY(-1px);
       }
+      #controls-toggle {
+        background: rgba(15, 23, 42, 0.85);
+        color: #e2e8f0;
+        padding: 10px 18px;
+        border: none;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: grab;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.45);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      }
+      #controls-toggle:active {
+        cursor: grabbing;
+      }
+      #controls-toggle:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 32px rgba(15, 23, 42, 0.55);
+      }
       #controls .statline {
         margin-top: 8px;
         font-size: 0.85rem;
@@ -173,8 +234,10 @@ HTML_TEMPLATE = Template(
         inset: 0;
       }
       @media (max-width: 640px) {
-        #controls {
+        .floating-controls {
           top: 8px;
+        }
+        #controls {
           padding: 14px;
           border-radius: 10px;
         }
@@ -211,6 +274,53 @@ HTML_TEMPLATE = Template(
       #controls .row-trail input[type="range"] {
         flex: 1 1 auto;
         min-width: 0;
+      }
+      #time-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        background: rgba(148, 163, 184, 0.18);
+        border-radius: 999px;
+        height: 6px;
+      }
+      #time-slider::-webkit-slider-runnable-track {
+        background: rgba(148, 163, 184, 0.18);
+        border-radius: 999px;
+        height: 6px;
+      }
+      #time-slider::-moz-range-track {
+        background: rgba(148, 163, 184, 0.18);
+        border-radius: 999px;
+        height: 6px;
+      }
+      #time-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        background: #f8fafc;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.75);
+        cursor: pointer;
+        height: 18px;
+        width: 18px;
+        margin-top: -6px;
+      }
+      #time-slider::-moz-range-thumb {
+        background: #f8fafc;
+        border: none;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.75);
+        cursor: pointer;
+        height: 18px;
+        width: 18px;
+        transform: translateY(-6px);
+      }
+      body.rainbow-active #time-slider {
+        background-image: var(--timeline-gradient);
+      }
+      body.rainbow-active #time-slider::-webkit-slider-runnable-track {
+        background-image: var(--timeline-gradient);
+      }
+      body.rainbow-active #time-slider::-moz-range-track {
+        background-image: var(--timeline-gradient);
       }
       #time-input {
         display: inline-block;
@@ -249,8 +359,19 @@ HTML_TEMPLATE = Template(
     </style>
   </head>
   <body>
-    <div id=\"controls\">
-      <h1>Trajectory explorer</h1>
+    <div id=\"controls\" class=\"floating-controls\" role=\"group\" aria-label=\"Trajectory explorer controls\">
+      <div class=\"controls-header\" id=\"controls-header\">
+        <h1>Trajectory explorer</h1>
+        <button
+          id=\"controls-collapse\"
+          class=\"ghost collapse-button\"
+          type=\"button\"
+          aria-controls=\"controls\"
+          aria-expanded=\"true\"
+        >
+          Minimize
+        </button>
+      </div>
       <section class=\"controls-row row-top\">
         <button id=\"play-toggle\" class=\"primary\" type=\"button\">Play</button>
         <button id=\"exploration-toggle\" class=\"ghost\" type=\"button\">Exploration mode</button>
@@ -265,6 +386,7 @@ HTML_TEMPLATE = Template(
           <option value="30000">500 min/s</option>
           <option value="60000">1000 min/s</option>
         </select>
+        <button id="palette-toggle" class="ghost" type="button" aria-pressed="false">Rainbow palette</button>
         <select id="basemap-select" class="pill-select" aria-label="Basemap style">
           <option value="Voyager" selected>Voyager</option>
           <option value="Positron">Positron</option>
@@ -287,6 +409,18 @@ HTML_TEMPLATE = Template(
         <div>D-Span: ${distance_km} km</div>
       </div>
     </div>
+    <button
+      id=\"controls-toggle\"
+      class=\"floating-controls collapsed-button\"
+      type=\"button\"
+      hidden
+      aria-controls=\"controls\"
+      aria-expanded=\"false\"
+      aria-label=\"Show controls\"
+      title=\"Show controls\"
+    >
+      Trajectory explorer
+    </button>
     <div id=\"deck-container\"></div>
 
     <script src=\"https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js\"></script>
@@ -303,9 +437,12 @@ HTML_TEMPLATE = Template(
         currentTime: 0,
         playing: false,
         exploration: false,
+        rainbow: false,
         trailLength: 3600,
         lastFrameTs: null,
         speedFactor: 300, // seconds of timeline per real second
+        controlsCollapsed: false,
+        controlsPosition: null,
       };
 
       const slider = document.getElementById('time-slider');
@@ -314,9 +451,23 @@ HTML_TEMPLATE = Template(
       const playToggle = document.getElementById('play-toggle');
       const explorationToggle = document.getElementById('exploration-toggle');
       const speedSelect = document.getElementById('speed-select');
+      const paletteToggle = document.getElementById('palette-toggle');
       const basemapSelect = document.getElementById('basemap-select');
 
       state.speedFactor = Number(speedSelect.value);
+
+      const rainbowStops = [
+        { t: 0.0, color: [239, 68, 68] }, // red
+        { t: 0.16, color: [249, 115, 22] }, // orange
+        { t: 0.32, color: [250, 204, 21] }, // yellow
+        { t: 0.48, color: [34, 197, 94] }, // green
+        { t: 0.64, color: [14, 165, 233] }, // sky
+        { t: 0.8, color: [99, 102, 241] }, // indigo
+        { t: 1.0, color: [139, 92, 246] }, // violet
+      ];
+      const timelineGradientCss = createGradientCss(rainbowStops);
+      document.body.style.setProperty('--timeline-gradient', timelineGradientCss);
+      let rainbowTripsCache = null;
 
       if (defaultStyleKey && mapStyles[defaultStyleKey]) {
         basemapSelect.value = defaultStyleKey;
@@ -358,6 +509,81 @@ HTML_TEMPLATE = Template(
         return (seconds / 3600).toFixed(1);
       }
 
+      function createGradientCss(stops) {
+        const segments = stops.map((entry) => {
+          const rgb =
+            'rgb(' +
+            entry.color[0] +
+            ', ' +
+            entry.color[1] +
+            ', ' +
+            entry.color[2] +
+            ') ' +
+            Math.round(entry.t * 100) +
+            '%';
+          return rgb;
+        });
+        return 'linear-gradient(90deg, ' + segments.join(', ') + ')';
+      }
+
+      function getRainbowColor(t) {
+        if (!Number.isFinite(t)) {
+          return rainbowStops[0].color.slice();
+        }
+        const clamped = Math.min(Math.max(t, 0), 1);
+        for (let i = 1; i < rainbowStops.length; i += 1) {
+          const prev = rainbowStops[i - 1];
+          const next = rainbowStops[i];
+          if (clamped <= next.t) {
+            const span = next.t - prev.t || 1;
+            const localT = (clamped - prev.t) / span;
+            return [
+              Math.round(prev.color[0] + (next.color[0] - prev.color[0]) * localT),
+              Math.round(prev.color[1] + (next.color[1] - prev.color[1]) * localT),
+              Math.round(prev.color[2] + (next.color[2] - prev.color[2]) * localT),
+            ];
+          }
+        }
+        return rainbowStops[rainbowStops.length - 1].color.slice();
+      }
+
+      function buildRainbowTripsData() {
+        const segments = [];
+        for (const trip of tripsData) {
+          const { path, timestamps, id } = trip;
+          if (!path || !timestamps || path.length < 2) {
+            continue;
+          }
+          for (let index = 0; index < path.length - 1; index += 1) {
+            const startPoint = path[index];
+            const endPoint = path[index + 1];
+            const startTs = timestamps[index];
+            const endTs = timestamps[index + 1];
+            if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
+              continue;
+            }
+            const normalized = timeline.duration > 0 ? startTs / timeline.duration : 0;
+            segments.push({
+              id: String(id) + '-' + String(index),
+              path: [startPoint, endPoint],
+              timestamps: [startTs, endTs],
+              color: getRainbowColor(normalized),
+            });
+          }
+        }
+        return segments;
+      }
+
+      function getActiveTripsData() {
+        if (!state.rainbow) {
+          return tripsData;
+        }
+        if (!rainbowTripsCache) {
+          rainbowTripsCache = buildRainbowTripsData();
+        }
+        return rainbowTripsCache;
+      }
+
       function getLatestPosition(currentTime) {
         let best = null;
         let bestTime = -Infinity;
@@ -378,9 +604,10 @@ HTML_TEMPLATE = Template(
 
       function createLayers() {
         const trailLength = state.exploration ? timeline.duration : state.trailLength;
+        const activeTrips = getActiveTripsData();
         const tripsLayer = new deck.TripsLayer({
           id: 'trips',
-          data: tripsData,
+          data: activeTrips,
           getPath: (d) => d.path,
           getTimestamps: (d) => d.timestamps,
           getColor: (d) => d.color,
@@ -436,6 +663,10 @@ HTML_TEMPLATE = Template(
         trailSlider.disabled = state.exploration;
         explorationToggle.classList.toggle('active', state.exploration);
         explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
+        paletteToggle.classList.toggle('active', state.rainbow);
+        paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
+        paletteToggle.textContent = state.rainbow ? 'Classic palette' : 'Rainbow palette';
+        document.body.classList.toggle('rainbow-active', state.rainbow);
       }
 
       function parseInputTimestamp(value) {
@@ -545,6 +776,14 @@ HTML_TEMPLATE = Template(
         state.exploration = !state.exploration;
         if (state.exploration) {
           state.trailLength = timeline.duration;
+        }
+        render();
+      });
+
+      paletteToggle.addEventListener('click', () => {
+        state.rainbow = !state.rainbow;
+        if (!state.rainbow) {
+          rainbowTripsCache = null;
         }
         render();
       });
