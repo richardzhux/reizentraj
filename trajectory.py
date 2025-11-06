@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover - optional dependency
     pycountry = None
 
 
-DEFAULT_OUTPUT_NAME = "trajectory_deck.html"
+DEFAULT_OUTPUT_NAME = "/Users/rx/Documents/VSCode/trajectory_deck.html"
 DEFAULT_INPUT_FILE = Path(__file__).resolve().parent / "nov5.json"
 DEFAULT_MAP_STYLE = "Voyager"
 MAP_STYLES: Dict[str, str] = {
