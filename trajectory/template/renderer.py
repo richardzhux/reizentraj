@@ -323,7 +323,8 @@ HTML_TEMPLATE = Template(
       </section>
       <div class="statline">
         <div>${country_count} countries</div>
-        <div>${state_count} US states</div>
+        <div>${us_state_count} US states</div>
+        <div>${region_count} regions</div>
         <div>Points: ${point_count}</div>
         <div>T-Span: ${timespan}</div>
         <div>D-Span: ${distance_km} km</div>
@@ -960,7 +961,8 @@ def render_html(
         timeline=json.dumps(timeline, ensure_ascii=False),
         initial_view_state=json.dumps(initial_view_state, ensure_ascii=False),
         country_count=len(stats.countries) if stats else 0,
-        state_count=len(stats.us_states) if stats else 0,
+        us_state_count=len(stats.us_states) if stats else 0,
+        region_count=sum(len(group.regions) for group in stats.region_groups) if stats else 0,
         point_count=point_count,
         map_style=map_style,
         map_styles=json.dumps(MAP_STYLES, ensure_ascii=False),

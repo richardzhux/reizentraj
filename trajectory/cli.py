@@ -196,7 +196,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     }
 
     stats = compute_location_stats(coordinates)
-    stats_for_html = stats if stats else LocationStats(countries=[], us_states=[])
+    stats_for_html = stats if stats else LocationStats(countries=[], us_states=[], region_groups=[])
     selected_map_style = normalise_map_style(args.map_style)
     timespan_text = format_timespan(duration)
     distance_km = compute_total_distance_km(coordinates, args.jump_threshold_km)

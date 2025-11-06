@@ -28,9 +28,17 @@ class RegionVisit:
 
 
 @dataclass(frozen=True)
+class RegionGroup:
+    country_code: str
+    country_label: str
+    regions: Sequence[RegionVisit]
+
+
+@dataclass(frozen=True)
 class LocationStats:
     countries: Sequence[RegionVisit]
     us_states: Sequence[RegionVisit]
+    region_groups: Sequence["RegionGroup"]
 
 
 @dataclass(frozen=True)
@@ -43,4 +51,3 @@ class NoFlyZone:
 
     def contains(self, latitude: float, longitude: float) -> bool:
         return self.min_lat <= latitude <= self.max_lat and self.min_lon <= longitude <= self.max_lon
-
