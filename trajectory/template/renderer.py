@@ -312,6 +312,7 @@ $play_toggle_control$explore_toggle_control$time_input_control$speed_select_cont
         $stats_inline
       </section>
 $timeline_section$trail_section
+      $stats_block
     </div>
     <button
       id=\"controls-toggle\"
@@ -1042,16 +1043,28 @@ def render_html(
     us_state_count = len(stats.us_states) if stats else 0
     region_count = sum(len(group.regions) for group in stats.region_groups) if stats else 0
 
-    stats_parts = [
-        f"{country_count} countries",
-        f"{us_state_count} US states",
-        f"{region_count} regions",
-        f"Points: {point_count}",
-    ]
-    if not safe_mode:
-        stats_parts.append(f"T-Span: {timespan}")
-    stats_parts.append(f"D-Span: {distance_km} km")
-    stats_inline = '        <span class="stats-inline">' + " · ".join(stats_parts) + "</span>\n"
+    if safe_mode:
+        inline_parts = [
+            f"{country_count} countries",
+            f"{us_state_count} US states",
+            f"{region_count} regions",
+            f"Points: {point_count}",
+            f"D-Span: {distance_km} km",
+        ]
+        stats_inline = '        <span class="stats-inline">' + " · ".join(inline_parts) + "</span>\n"
+        stats_block = ""
+    else:
+        stats_inline = ""
+        stats_block = (
+            "      <div class=\"statline\">\n"
+            f"        <div>{country_count} countries</div>\n"
+            f"        <div>{us_state_count} US states</div>\n"
+            f"        <div>{region_count} regions</div>\n"
+            f"        <div>Points: {point_count}</div>\n"
+            f"        <div>T-Span: {timespan}</div>\n"
+            f"        <div>D-Span: {distance_km} km</div>\n"
+            "      </div>\n"
+        )
 
     play_toggle_control = (
         '        <button id="play-toggle" class="primary" type="button">Play</button>\n'
@@ -1125,4 +1138,5 @@ def render_html(
         timeline_section=timeline_section,
         trail_section=trail_section,
         stats_inline=stats_inline,
+        stats_block=stats_block,
     )
