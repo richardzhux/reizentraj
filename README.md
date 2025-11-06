@@ -45,7 +45,8 @@ Key options (`trajectory.py` and `folium_trajectory.py` share the same CLI):
 - `--output`: HTML destination for the map (`trajectory_map.html` by default).
 - `--start-date` / `--end-date`: pre-fill the interactive prompt or set the range directly (`YYYY-MM-DD` or `YYYYMMDD`).
 - `--jump-threshold-km`: discard point-to-point hops above this distance (defaults to 50 km).
-- `--zoom`: initial Folium zoom level (defaults to 6).
+- `--zoom`: initial zoom level for the map (deck.gl defaults to 4 for continental US coverage; the Folium build keeps its original default of 6).
+- `--map-style`: choose `Voyager`, `Positron`, `Dark Matter`, or supply a custom MapLibre style URL.
 - `--exclude-no-fly-zones`: force removal of the protected regions without prompting.
 - `--include-no-fly-zones`: keep the protected regions without prompting.
 - `--no-prompt`: skip all interactive prompts (date range and no-fly zones) and rely entirely on CLI values.
@@ -61,12 +62,18 @@ python3 trajectory.py \
   --output reports/trajectory_2023.html
 ```
 
-Open the generated HTML file in your browser to explore the interactive map.
 Open the generated HTML file in your browser to explore the interactive map. The deck.gl build comes with:
-- A full-width timeline slider, play/pause control, and configurable playback speed.
+- A full-width timeline slider, play/pause control, and new playback presets ranging from 1 to 1000 minutes of travel per real second.
+- The timestamp pill is editable—enter any `YYYY-MM-DD HH:MM:SS` within the data range to jump directly.
+- A basemap selector (Voyager, Positron, Dark Matter) beside the speed control.
 - A pig-head marker that hugs the active position along the path.
 - An **Exploration mode** toggle that draws the travelled route cumulatively as you scrub the timeline.
 - Adjustable trail length (in hours) when Exploration mode is off.
+- A palette toggle switches between the classic blue trip style and a rainbow gradient that colors older points warm (reds) and newer points cool (purples); the timeline slider reflects the chosen palette.
+- Stats include `T-Span` (temporal coverage) and `D-Span` (total kilometres travelled) for quick reporting. `D-Span` only sums distances that actually render on the map. Example edge cases:
+  - Points inside configured no-fly zones (e.g., Northwestern campus) are removed entirely, so the mileage excludes time spent there; you’ll see the segment resume at the edge of the box.
+  - Any hop longer than the jump threshold (50 km by default) is discarded—long-haul flights appear as disconnected points, and their distance is not counted.
+  - GPS gaps that produce missing points simply break the segment; only the legs with valid data contribute to the total.
 
 When the optional dependencies are installed, the script prints a travel summary after building the map. The summary lists the number of visited countries, their last recorded entry dates, and—if applicable—the count of US states plus their last entry dates.
 

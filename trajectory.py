@@ -24,7 +24,12 @@ except ImportError:  # pragma: no cover - optional dependency
 
 DEFAULT_OUTPUT_NAME = "trajectory_deck.html"
 DEFAULT_INPUT_FILE = Path(__file__).resolve().parent / "nov5.json"
-DEFAULT_MAP_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+DEFAULT_MAP_STYLE = "Voyager"
+MAP_STYLES: Dict[str, str] = {
+    "Voyager": "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+    "Positron": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "Dark Matter": "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+}
 
 
 LOCAL_TZ = datetime.now().astimezone().tzinfo
@@ -125,24 +130,7 @@ HTML_TEMPLATE = Template(
         margin: 0 0 12px;
         letter-spacing: 0.02em;
       }
-      #controls section {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px 18px;
-        align-items: center;
-        margin-bottom: 12px;
-      }
-      #controls label {
-        font-size: 0.85rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-      #controls input[type=\"range\"] {
-        flex: 1 1 220px;
-      }
-      #controls button,
-      #controls select {
+      #controls button {
         font-size: 0.9rem;
         border-radius: 999px;
         border: none;
@@ -184,50 +172,119 @@ HTML_TEMPLATE = Template(
         position: absolute;
         inset: 0;
       }
-      #time-label {
-        font-feature-settings: "tnum";
-        font-variant-numeric: tabular-nums;
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: rgba(148, 163, 184, 0.16);
-      }
       @media (max-width: 640px) {
         #controls {
           top: 8px;
           padding: 14px;
           border-radius: 10px;
         }
-        #controls section {
+        #controls .controls-row {
           gap: 10px 12px;
         }
+      }
+      #controls .controls-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      #controls .row-top {
+        justify-content: flex-start;
+      }
+      #controls .row-timeline,
+      #controls .row-trail {
+        flex-wrap: nowrap;
+      }
+      #controls label,
+      .slider-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #cbd5f5;
+      }
+      .slider-label {
+        min-width: 140px;
+      }
+      #controls .row-timeline input[type="range"],
+      #controls .row-trail input[type="range"] {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #time-input {
+        display: inline-block;
+        font-feature-settings: "tnum";
+        font-variant-numeric: tabular-nums;
+        padding: 10px 18px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.22);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+        border: none;
+        color: #f1f5f9;
+        font-size: 0.95rem;
+        min-width: 210px;
+        text-align: center;
+      }
+      #time-input:focus {
+        outline: 2px solid rgba(56, 189, 248, 0.65);
+        outline-offset: 2px;
+        background: rgba(30, 64, 175, 0.35);
+      }
+      .pill-select {
+        appearance: none;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.18);
+        color: #f8fafc;
+        padding: 10px 18px;
+        border: none;
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .pill-select:focus {
+        outline: 2px solid rgba(56, 189, 248, 0.65);
+        outline-offset: 2px;
       }
     </style>
   </head>
   <body>
     <div id=\"controls\">
       <h1>Trajectory explorer</h1>
-      <section>
+      <section class=\"controls-row row-top\">
         <button id=\"play-toggle\" class=\"primary\" type=\"button\">Play</button>
         <button id=\"exploration-toggle\" class=\"ghost\" type=\"button\">Exploration mode</button>
-        <label for=\"time-slider\">Timeline</label>
-        <input id=\"time-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"60\" value=\"0\" />
-        <span id=\"time-label\"></span>
-      </section>
-      <section>
-        <label for=\"trail-slider\">Trail length (hours)</label>
-        <input id=\"trail-slider\" type=\"range\" min=\"1\" max=\"48\" step=\"1\" value=\"1\" />
-        <label for=\"speed-select\">Playback speed</label>
-        <select id=\"speed-select\">
-          <option value=\"300\">5x</option>
-          <option value=\"120\">2x</option>
-          <option value=\"60\" selected>1x</option>
-          <option value=\"30\">0.5x</option>
+        <input id="time-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Current timestamp" />
+        <select id="speed-select" class="pill-select" aria-label="Playback speed">
+          <option value="60">1 min/s</option>
+          <option value="300" selected>5 min/s</option>
+          <option value="600">10 min/s</option>
+          <option value="1200">20 min/s</option>
+          <option value="3000">50 min/s</option>
+          <option value="6000">100 min/s</option>
+          <option value="30000">500 min/s</option>
+          <option value="60000">1000 min/s</option>
+        </select>
+        <select id="basemap-select" class="pill-select" aria-label="Basemap style">
+          <option value="Voyager" selected>Voyager</option>
+          <option value="Positron">Positron</option>
+          <option value="Dark Matter">Dark Matter</option>
         </select>
       </section>
-      <div class=\"statline\">
+      <section class=\"controls-row row-timeline\">
+        <label class=\"slider-label\" for=\"time-slider\">Timeline</label>
+        <input id=\"time-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"60\" value=\"0\" />
+      </section>
+      <section class=\"controls-row row-trail\">
+        <label class=\"slider-label\" for=\"trail-slider\">Trail length (hours)</label>
+        <input id=\"trail-slider\" type=\"range\" min=\"1\" max=\"48\" step=\"1\" value=\"1\" />
+      </section>
+      <div class="statline">
         <div>${country_count} countries</div>
         <div>${state_count} US states</div>
         <div>Points: ${point_count}</div>
+        <div>T-Span: ${timespan}</div>
+        <div>D-Span: ${distance_km} km</div>
       </div>
     </div>
     <div id=\"deck-container\"></div>
@@ -239,7 +296,8 @@ HTML_TEMPLATE = Template(
       const tripsData = ${deck_data};
       const timeline = ${timeline};
       const initialViewState = ${initial_view_state};
-      const mapStyle = "${map_style}";
+      const mapStyles = ${map_styles};
+      const defaultStyleKey = "${map_style}";
 
       const state = {
         currentTime: 0,
@@ -247,26 +305,45 @@ HTML_TEMPLATE = Template(
         exploration: false,
         trailLength: 3600,
         lastFrameTs: null,
-        speedFactor: 60, // seconds per real second
+        speedFactor: 300, // seconds of timeline per real second
       };
 
       const slider = document.getElementById('time-slider');
       const trailSlider = document.getElementById('trail-slider');
-      const label = document.getElementById('time-label');
+      const timeInput = document.getElementById('time-input');
       const playToggle = document.getElementById('play-toggle');
       const explorationToggle = document.getElementById('exploration-toggle');
       const speedSelect = document.getElementById('speed-select');
+      const basemapSelect = document.getElementById('basemap-select');
+
+      state.speedFactor = Number(speedSelect.value);
+
+      if (defaultStyleKey && mapStyles[defaultStyleKey]) {
+        basemapSelect.value = defaultStyleKey;
+      } else if (defaultStyleKey) {
+        mapStyles[defaultStyleKey] = defaultStyleKey;
+        const customOption = document.createElement('option');
+        customOption.value = defaultStyleKey;
+        customOption.textContent = 'Custom';
+        basemapSelect.appendChild(customOption);
+        basemapSelect.value = defaultStyleKey;
+      } else if (!mapStyles[basemapSelect.value] && Object.keys(mapStyles).length > 0) {
+        basemapSelect.value = Object.keys(mapStyles)[0];
+      }
+
+      const initialMapStyle =
+        mapStyles[basemapSelect.value] || mapStyles[defaultStyleKey] || Object.values(mapStyles)[0];
 
       slider.max = timeline.duration;
       slider.step = Math.max(60, Math.floor(timeline.duration / 1000));
       slider.value = 0;
       trailSlider.value = 1;
-      label.textContent = formatTime(timeline.start + state.currentTime);
+      timeInput.value = formatTime(timeline.start + state.currentTime);
 
       const deckgl = new deck.DeckGL({
         container: 'deck-container',
         map: maplibregl,
-        mapStyle,
+        mapStyle: initialMapStyle,
         controller: true,
         initialViewState,
         layers: createLayers(),
@@ -310,7 +387,7 @@ HTML_TEMPLATE = Template(
           opacity: 0.85,
           widthMinPixels: 4,
           rounded: true,
-          fadeTrail: true,
+          fadeTrail: !state.exploration,
           trailLength,
           currentTime: state.currentTime,
           shadowEnabled: false,
@@ -332,14 +409,89 @@ HTML_TEMPLATE = Template(
         return [tripsLayer, pigLayer];
       }
 
+      function clampOffset(seconds) {
+        if (!Number.isFinite(seconds)) {
+          return 0;
+        }
+        return Math.min(Math.max(seconds, 0), timeline.duration);
+      }
+
+      function clampEpoch(seconds) {
+        if (!Number.isFinite(seconds)) {
+          return timeline.start;
+        }
+        if (seconds < timeline.start) {
+          return timeline.start;
+        }
+        if (seconds > timeline.end) {
+          return timeline.end;
+        }
+        return seconds;
+      }
+
       function render() {
         deckgl.setProps({ layers: createLayers() });
         slider.value = state.currentTime;
-        label.textContent = formatTime(timeline.start + state.currentTime);
+        timeInput.value = formatTime(timeline.start + state.currentTime);
         trailSlider.disabled = state.exploration;
         explorationToggle.classList.toggle('active', state.exploration);
         explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
       }
+
+      function parseInputTimestamp(value) {
+        if (!value) {
+          return null;
+        }
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return null;
+        }
+        const normalized = trimmed.replace(' ', 'T');
+        let parsed = new Date(normalized);
+        if (Number.isNaN(parsed.getTime())) {
+          parsed = new Date(normalized + 'Z');
+        }
+        if (Number.isNaN(parsed.getTime())) {
+          return null;
+        }
+        return parsed.getTime() / 1000;
+      }
+
+      function commitTimeInput(rawValue) {
+        const epochSeconds = parseInputTimestamp(rawValue);
+        if (epochSeconds == null) {
+          // Revert to current value if parse fails.
+          render();
+          return;
+        }
+        const clampedEpoch = clampEpoch(epochSeconds);
+        state.currentTime = clampOffset(clampedEpoch - timeline.start);
+        render();
+      }
+
+      timeInput.addEventListener('focus', () => {
+        timeInput.select();
+        if (state.playing) {
+          state.playing = false;
+          playToggle.textContent = 'Play';
+          state.lastFrameTs = null;
+        }
+      });
+
+      timeInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          commitTimeInput(event.target.value);
+          event.preventDefault();
+        } else if (event.key === 'Escape') {
+          render();
+          event.preventDefault();
+          timeInput.blur();
+        }
+      });
+
+      timeInput.addEventListener('blur', (event) => {
+        commitTimeInput(event.target.value);
+      });
 
       function stepAnimation(timestamp) {
         if (!state.playing) {
@@ -397,6 +549,17 @@ HTML_TEMPLATE = Template(
         render();
       });
 
+      basemapSelect.addEventListener('change', (event) => {
+        const styleKey = event.target.value;
+        const styleUrl =
+          mapStyles[styleKey] ||
+          mapStyles[defaultStyleKey] ||
+          mapStyles[Object.keys(mapStyles)[0]];
+        if (styleUrl) {
+          deckgl.setProps({ mapStyle: styleUrl });
+        }
+      });
+
       render();
     </script>
   </body>
@@ -444,14 +607,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--zoom",
         type=float,
-        default=6.0,
-        help="Initial zoom level for the map (default: 6).",
+        default=4.0,
+        help="Initial zoom level for the map (default: 4).",
     )
     parser.add_argument(
         "--map-style",
         type=str,
         default=DEFAULT_MAP_STYLE,
-        help="MapLibre style URL to use for the basemap.",
+        help="Basemap style (Voyager, Positron, Dark Matter) or a custom MapLibre style URL.",
     )
     parser.add_argument(
         "--no-prompt",
@@ -675,6 +838,19 @@ def haversine_vectorized(
     return radius * c
 
 
+def compute_total_distance_km(coordinates: Sequence[Coordinate], threshold_km: float) -> float:
+    if len(coordinates) < 2:
+        return 0.0
+    coords_array = np.array([coord.as_latlon for coord in coordinates])
+    distances = haversine_vectorized(
+        coords_array[:-1, 0],
+        coords_array[:-1, 1],
+        coords_array[1:, 0],
+        coords_array[1:, 1],
+    )
+    valid = distances <= threshold_km
+    return float(distances[valid].sum())
+
 def lookup_country_name(iso_code: str) -> str:
     if not iso_code:
         return "Unknown"
@@ -759,6 +935,34 @@ def decide_no_fly_preference(args: argparse.Namespace) -> bool:
         print("Please answer with 'y' or 'n'.")
 
 
+def normalise_map_style(style: str) -> str:
+    if not style:
+        return DEFAULT_MAP_STYLE
+    candidate = style.strip()
+    if candidate in MAP_STYLES:
+        return candidate
+    title_candidate = candidate.title()
+    if title_candidate in MAP_STYLES:
+        return title_candidate
+    return candidate
+
+
+def format_timespan(seconds: float) -> str:
+    if seconds <= 0:
+        return "0 days"
+    total_days = int(seconds // 86400)
+    years, rem_days = divmod(total_days, 365)
+    months, days = divmod(rem_days, 30)
+    parts: List[str] = []
+    if years:
+        parts.append(f"{years} year{'s' if years != 1 else ''}")
+    if months:
+        parts.append(f"{months} month{'s' if months != 1 else ''}")
+    if days or not parts:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    return ", ".join(parts)
+
+
 def isoformat_local(dt: datetime) -> str:
     return dt.astimezone(LOCAL_TZ).strftime("%Y-%m-%d")
 
@@ -788,15 +992,11 @@ def compute_initial_view_state(
     coordinates: Sequence[Coordinate],
     zoom: float,
 ) -> dict:
-    if not coordinates:
-        return {"longitude": 0, "latitude": 0, "zoom": zoom, "pitch": 45, "bearing": 0}
-    lats = [coord.latitude for coord in coordinates]
-    lons = [coord.longitude for coord in coordinates]
     return {
-        "longitude": float(np.mean(lons)),
-        "latitude": float(np.mean(lats)),
+        "longitude": -98.5795,
+        "latitude": 39.8283,
         "zoom": float(zoom),
-        "pitch": 45,
+        "pitch": 0,
         "bearing": 0,
     }
 
@@ -808,6 +1008,8 @@ def render_html(
     stats: LocationStats,
     point_count: int,
     map_style: str,
+    timespan: str,
+    distance_km: int,
 ) -> str:
     return HTML_TEMPLATE.substitute(
         deck_data=json.dumps(data, ensure_ascii=False),
@@ -817,6 +1019,9 @@ def render_html(
         state_count=len(stats.us_states) if stats else 0,
         point_count=point_count,
         map_style=map_style,
+        map_styles=json.dumps(MAP_STYLES, ensure_ascii=False),
+        timespan=timespan,
+        distance_km=distance_km,
     )
 
 
@@ -935,13 +1140,18 @@ def main() -> None:
 
     stats = compute_location_stats(coordinates)
     stats_for_html = stats if stats else LocationStats(countries=[], us_states=[])
+    selected_map_style = normalise_map_style(args.map_style)
+    timespan_text = format_timespan(duration)
+    distance_km = compute_total_distance_km(coordinates, args.jump_threshold_km)
     html = render_html(
         deck_data,
         timeline,
         initial_view_state,
         stats_for_html,
         point_count=len(coordinates),
-        map_style=args.map_style,
+        map_style=selected_map_style,
+        timespan=timespan_text,
+        distance_km=round(distance_km),
     )
 
     print_stats(stats)
