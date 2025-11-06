@@ -107,23 +107,31 @@ def haversine_vectorized(
 def build_segments(
     coordinates: Sequence[Coordinate],
     threshold_km: float,
-) -> Tuple[List[LineString], List[List[Coordinate]]]:
+) -> Tuple[List[LineString], List[List[Coordinate]], List[Tuple[Coordinate, Coordinate]]]:
     if len(coordinates) < 2:
-        return [], []
+        return [], [], []
 
-    coords_array = np.array([coord.as_latlon for coord in coordinates])
+    coord_list = list(coordinates)
+    coords_array = np.array([coord.as_latlon for coord in coord_list])
     distances = haversine_vectorized(
         coords_array[:-1, 0],
         coords_array[:-1, 1],
         coords_array[1:, 0],
         coords_array[1:, 1],
     )
+    break_indices = np.where(distances > threshold_km)[0]
     mask = np.insert(distances <= threshold_km, 0, True)
 
     segments_coords: List[List[Coordinate]] = []
     current_segment: List[Coordinate] = []
+    flight_min_distance_km = 100.0
+    flights: List[Tuple[Coordinate, Coordinate]] = [
+        (coord_list[idx], coord_list[idx + 1])
+        for idx in break_indices
+        if idx + 1 < len(coord_list) and distances[idx] >= flight_min_distance_km
+    ]
 
-    for keep, coord in zip(mask, coordinates):
+    for keep, coord in zip(mask, coord_list):
         if keep:
             current_segment.append(coord)
         else:
@@ -135,4 +143,4 @@ def build_segments(
         segments_coords.append(current_segment)
 
     segments = [LineString([coord.as_lonlat for coord in segment]) for segment in segments_coords]
-    return segments, segments_coords
+    return segments, segments_coords, flights

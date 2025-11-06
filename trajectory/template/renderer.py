@@ -117,6 +117,11 @@ HTML_TEMPLATE = Template(
       #controls button.ghost:hover {
         transform: translateY(-1px);
       }
+      #flights-toggle.ghost.active {
+        background: #0033a0;
+        color: #f8fafc;
+        box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.35);
+      }
       #controls-toggle {
         background: rgba(15, 23, 42, 0.85);
         color: #e2e8f0;
@@ -312,6 +317,9 @@ HTML_TEMPLATE = Template(
           <option value="Positron">Positron</option>
           <option value="Dark Matter">Dark Matter</option>
         </select>
+        <button id="flights-toggle" class="ghost" type="button" aria-pressed="false" aria-label="Toggle flight routes">
+          ✈️
+        </button>
       </section>
       <section class=\"controls-row row-timeline\">
         <label class=\"slider-label\" for=\"time-slider\">Timeline</label>
@@ -350,6 +358,7 @@ HTML_TEMPLATE = Template(
     <script>
       const tripsData = ${deck_data};
       const timeline = ${timeline};
+      const flightsData = ${flights_data};
       const initialViewState = ${initial_view_state};
       const mapStyles = ${map_styles};
       const defaultStyleKey = "${map_style}";
@@ -364,6 +373,7 @@ HTML_TEMPLATE = Template(
         speedFactor: 300, // seconds of timeline per real second
         controlsCollapsed: false,
         controlsPosition: null,
+        showFlights: false,
       };
 
       const slider = document.getElementById('time-slider');
@@ -378,6 +388,7 @@ HTML_TEMPLATE = Template(
       const controlsHeader = document.getElementById('controls-header');
       const collapseButton = document.getElementById('controls-collapse');
       const controlsToggle = document.getElementById('controls-toggle');
+      const flightsToggle = document.getElementById('flights-toggle');
 
       state.speedFactor = Number(speedSelect.value);
 
@@ -734,6 +745,20 @@ HTML_TEMPLATE = Template(
       }
 
       function createLayers() {
+        if (state.showFlights) {
+          const flightsLayer = new deck.ArcLayer({
+            id: 'flights',
+            data: flightsData,
+            getSourcePosition: (d) => d.source,
+            getTargetPosition: (d) => d.target,
+            getSourceColor: () => [0, 51, 160],
+            getTargetColor: () => [56, 189, 248],
+            getWidth: () => 3,
+            greatCircle: true,
+            pickable: false,
+          });
+          return [flightsLayer];
+        }
         const trailLength = state.exploration ? timeline.duration : state.trailLength;
         const activeTrips = getActiveTripsData();
         const tripsLayer = new deck.TripsLayer({
@@ -791,13 +816,16 @@ HTML_TEMPLATE = Template(
         deckgl.setProps({ layers: createLayers() });
         slider.value = state.currentTime;
         timeInput.value = formatTime(timeline.start + state.currentTime);
-        trailSlider.disabled = state.exploration;
+        trailSlider.disabled = state.exploration || state.showFlights;
+        slider.disabled = state.showFlights;
         explorationToggle.classList.toggle('active', state.exploration);
         explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
         paletteToggle.classList.toggle('active', state.rainbow);
         paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
         paletteToggle.textContent = '🌈';
         paletteToggle.setAttribute('aria-label', 'Toggle rainbow palette');
+        flightsToggle.classList.toggle('active', state.showFlights);
+        flightsToggle.setAttribute('aria-pressed', state.showFlights ? 'true' : 'false');
         document.body.classList.toggle('rainbow-active', state.rainbow);
         autoSizeSelect(speedSelect);
         autoSizeSelect(basemapSelect);
@@ -936,6 +964,16 @@ HTML_TEMPLATE = Template(
         autoSizeSelect(basemapSelect);
       });
 
+      flightsToggle.addEventListener('click', () => {
+        state.showFlights = !state.showFlights;
+        if (state.showFlights && state.playing) {
+          state.playing = false;
+          playToggle.textContent = 'Play';
+          state.lastFrameTs = null;
+        }
+        render();
+      });
+
       autoSizeSelect(speedSelect);
       autoSizeSelect(basemapSelect);
       render();
@@ -955,6 +993,7 @@ def render_html(
     map_style: str,
     timespan: str,
     distance_km: int,
+    flights_data: List[dict],
 ) -> str:
     return HTML_TEMPLATE.substitute(
         deck_data=json.dumps(data, ensure_ascii=False),
@@ -968,4 +1007,5 @@ def render_html(
         map_styles=json.dumps(MAP_STYLES, ensure_ascii=False),
         timespan=timespan,
         distance_km=distance_km,
+        flights_data=json.dumps(flights_data, ensure_ascii=False),
     )

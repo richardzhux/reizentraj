@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
 from .constants import DEFAULT_MAP_STYLE, DEFAULT_OUTPUT_NAME, MAP_STYLES
-from .deckbuilder import build_deck_payload, compute_initial_view_state
+from .deckbuilder import build_deck_payload, build_flight_arcs, compute_initial_view_state
 from .io import load_takeout_payload, resolve_input_path
 from .models import LocationStats
 from .preprocess import apply_date_filters, build_segments, extract_coordinates, filter_no_fly_zones
@@ -179,7 +179,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
                 f"Excluded {sum(excluded_counts.values())} points inside protected areas ({excluded_summary})."
             )
 
-    segments, segment_coords = build_segments(coordinates, args.jump_threshold_km)
+    segments, segment_coords, flights = build_segments(coordinates, args.jump_threshold_km)
     if not segments:
         raise SystemExit("All segments were discarded. Try increasing --jump-threshold-km.")
 
@@ -200,6 +200,8 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     selected_map_style = normalise_map_style(args.map_style)
     timespan_text = format_timespan(duration)
     distance_km = compute_total_distance_km(coordinates, args.jump_threshold_km)
+    flight_data = build_flight_arcs(flights)
+
     html = render_html(
         deck_data,
         timeline,
@@ -209,6 +211,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         map_style=selected_map_style,
         timespan=timespan_text,
         distance_km=round(distance_km),
+        flights_data=flight_data,
     )
 
     print_stats(stats)

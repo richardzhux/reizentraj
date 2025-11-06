@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Sequence
+from typing import List, Sequence, Tuple
 
 from .models import Coordinate
 
@@ -37,3 +37,17 @@ def compute_initial_view_state(
         "bearing": 0,
     }
 
+
+def build_flight_arcs(flights: Sequence[Tuple[Coordinate, Coordinate]]) -> List[dict]:
+    arcs: List[dict] = []
+    for index, (origin, dest) in enumerate(flights):
+        arcs.append(
+            {
+                "id": f"flight-{index}",
+                "source": [origin.longitude, origin.latitude],
+                "target": [dest.longitude, dest.latitude],
+                "departure": origin.timestamp.timestamp(),
+                "arrival": dest.timestamp.timestamp(),
+            }
+        )
+    return arcs
