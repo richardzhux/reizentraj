@@ -6,7 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
-from .constants import DEFAULT_MAP_STYLE, DEFAULT_OUTPUT_NAME, MAP_STYLES
+from .coarsen import coarsen_coordinates
+from .constants import DEFAULT_MAP_STYLE, DEFAULT_OUTPUT_DIR, MAP_STYLES
 from .deckbuilder import build_deck_payload, build_flight_arcs, compute_initial_view_state
 from .io import load_takeout_payload, resolve_input_path
 from .models import LocationStats
@@ -31,8 +32,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "-o",
         "--output",
         type=Path,
-        default=Path(DEFAULT_OUTPUT_NAME),
-        help=f"HTML path for the generated explorer (default: {DEFAULT_OUTPUT_NAME}).",
+        default=None,
+        help="HTML path for the generated explorer (default: named automatically based on privacy settings).",
     )
     parser.add_argument(
         "--start-date",
@@ -69,6 +70,20 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Skip interactive prompts (use CLI arguments or full data range).",
     )
+    coarse_group = parser.add_mutually_exclusive_group()
+    coarse_group.add_argument(
+        "--coarsen",
+        dest="coarsen",
+        action="store_true",
+        help="Apply privacy coarsening (daily curves with heavy smoothing) before rendering.",
+    )
+    coarse_group.add_argument(
+        "--no-coarsen",
+        dest="coarsen",
+        action="store_false",
+        help="Always keep precise points (skip privacy coarsening even if prompted).",
+    )
+    parser.set_defaults(coarsen=None)
     no_fly_group = parser.add_mutually_exclusive_group()
     no_fly_group.add_argument(
         "--exclude-no-fly-zones",
@@ -83,18 +98,36 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def decide_no_fly_preference(args: argparse.Namespace) -> bool:
+def decide_no_fly_preference(args: argparse.Namespace, should_prompt: bool) -> bool:
     if args.exclude_no_fly_zones:
         return True
     if args.include_no_fly_zones:
         return False
-    if not sys.stdin.isatty():
+    if not should_prompt:
         return False
     while True:
         answer = input("Exclude points in predefined no-fly zones? [Y/n]: ").strip().lower()
         if answer in {"y", "yes", ""}:
             return True
         if answer in {"n", "no"}:
+            return False
+        print("Please enter 'y' or 'n'.")
+
+
+def decide_coarsen_preference(args: argparse.Namespace, should_prompt: bool) -> bool:
+    if args.coarsen is True:
+        return True
+    if args.coarsen is False:
+        return False
+    if not should_prompt:
+        return False
+    while True:
+        answer = input(
+            "Apply privacy coarsening (smooth daily curves instead of raw points)? [y/N]: "
+        ).strip().lower()
+        if answer in {"y", "yes"}:
+            return True
+        if answer in {"n", "no", ""}:
             return False
         print("Please enter 'y' or 'n'.")
 
@@ -156,9 +189,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     start = parse_date_string(args.start_date) if args.start_date else None
     end = parse_date_string(args.end_date) if args.end_date else None
-    exclude_no_fly_zones = decide_no_fly_preference(args)
-
     should_prompt = not args.no_prompt and sys.stdin.isatty()
+    apply_coarsening = decide_coarsen_preference(args, should_prompt)
+    if apply_coarsening and args.include_no_fly_zones:
+        print(
+            "Privacy coarsening always excludes predefined no-fly zones; ignoring --include-no-fly-zones."
+        )
+    exclude_no_fly_zones = True if apply_coarsening else decide_no_fly_preference(args, should_prompt)
+
     if should_prompt:
         start, end = prompt_date_range(start, end, earliest, latest)
 
@@ -178,6 +216,14 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
             print(
                 f"Excluded {sum(excluded_counts.values())} points inside protected areas ({excluded_summary})."
             )
+
+    if apply_coarsening:
+        before_count = len(coordinates)
+        coordinates = coarsen_coordinates(coordinates)
+        after_count = len(coordinates)
+        print(
+            f"Applied privacy coarsening: reduced {before_count} raw points to {after_count} daily smoothed points."
+        )
 
     segments, segment_coords, flights = build_segments(coordinates, args.jump_threshold_km)
     if not segments:
@@ -200,7 +246,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     selected_map_style = normalise_map_style(args.map_style)
     timespan_text = format_timespan(duration)
     distance_km = compute_total_distance_km(coordinates, args.jump_threshold_km)
-    flight_data = build_flight_arcs(flights)
+    flight_data = [] if apply_coarsening else build_flight_arcs(flights)
 
     html = render_html(
         deck_data,
@@ -212,11 +258,22 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         timespan=timespan_text,
         distance_km=round(distance_km),
         flights_data=flight_data,
+        safe_mode=apply_coarsening,
     )
 
     print_stats(stats)
 
-    output_path = args.output
+    if args.output is not None:
+        output_path = args.output
+    else:
+        if apply_coarsening:
+            filename = "trajectory_coarsen.html"
+        elif exclude_no_fly_zones:
+            filename = "trajectory_nfz.html"
+        else:
+            filename = "trajectory_full.html"
+        output_path = DEFAULT_OUTPUT_DIR / filename
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     print(f"Saved deck.gl explorer to {output_path.resolve()}")

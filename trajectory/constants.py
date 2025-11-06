@@ -6,8 +6,11 @@ from typing import Dict, Sequence
 
 from .models import NoFlyZone
 
-DEFAULT_OUTPUT_NAME = "/Users/rx/Documents/VSCode/trajectory_deck.html"
-DEFAULT_INPUT_FILE = Path(__file__).resolve().parent.parent / "nov5.json"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_OUTPUT_PATH = (BASE_DIR / "trajectory_deck.html").resolve()
+DEFAULT_OUTPUT_DIR = DEFAULT_OUTPUT_PATH.parent
+DEFAULT_OUTPUT_NAME = str(DEFAULT_OUTPUT_PATH)
+DEFAULT_INPUT_FILE = BASE_DIR / "nov5.json"
 DEFAULT_MAP_STYLE = "Voyager"
 
 MAP_STYLES: Dict[str, str] = {
@@ -34,4 +37,3 @@ NO_FLY_ZONES: Sequence[NoFlyZone] = (
 )
 
 LOCAL_TZ = datetime.now().astimezone().tzinfo
-

@@ -174,6 +174,12 @@ HTML_TEMPLATE = Template(
       #controls .row-top {
         justify-content: flex-start;
       }
+      .stats-inline {
+        font-size: 0.85rem;
+        opacity: 0.85;
+        flex: 1 1 auto;
+        text-align: right;
+      }
       #controls .row-timeline,
       #controls .row-trail {
         flex-wrap: nowrap;
@@ -296,47 +302,16 @@ HTML_TEMPLATE = Template(
         </button>
       </div>
       <section class=\"controls-row row-top\">
-        <button id=\"play-toggle\" class=\"primary\" type=\"button\">Play</button>
-        <button id=\"exploration-toggle\" class=\"ghost\" type=\"button\">Explore</button>
-        <input id="time-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Current timestamp" />
-        <select id="speed-select" class="pill-select" aria-label="Playback speed">
-          <option value="60">1 min/s</option>
-          <option value="300" selected>5 min/s</option>
-          <option value="600">10 min/s</option>
-          <option value="1200">20 min/s</option>
-          <option value="3000">50 min/s</option>
-          <option value="6000">100 min/s</option>
-          <option value="30000">500 min/s</option>
-          <option value="60000">1000 min/s</option>
-        </select>
-        <button id="palette-toggle" class="ghost" type="button" aria-pressed="false" aria-label="Toggle rainbow palette">
-          🌈
-        </button>
+$play_toggle_control$explore_toggle_control$time_input_control$speed_select_control$palette_toggle_control
         <select id="basemap-select" class="pill-select" aria-label="Basemap style">
           <option value="Voyager" selected>Voyager</option>
           <option value="Positron">Positron</option>
           <option value="Dark Matter">Dark Matter</option>
         </select>
-        <button id="flights-toggle" class="ghost" type="button" aria-pressed="false" aria-label="Toggle flight routes">
-          ✈️
-        </button>
+        $flights_toggle_control
+        $stats_inline
       </section>
-      <section class=\"controls-row row-timeline\">
-        <label class=\"slider-label\" for=\"time-slider\">Timeline</label>
-        <input id=\"time-slider\" type=\"range\" min=\"0\" max=\"1\" step=\"60\" value=\"0\" />
-      </section>
-      <section class=\"controls-row row-trail\">
-        <label class=\"slider-label\" for=\"trail-slider\">Trail length (hours)</label>
-        <input id=\"trail-slider\" type=\"range\" min=\"1\" max=\"48\" step=\"1\" value=\"1\" />
-      </section>
-      <div class="statline">
-        <div>${country_count} countries</div>
-        <div>${us_state_count} US states</div>
-        <div>${region_count} regions</div>
-        <div>Points: ${point_count}</div>
-        <div>T-Span: ${timespan}</div>
-        <div>D-Span: ${distance_km} km</div>
-      </div>
+$timeline_section$trail_section
     </div>
     <button
       id=\"controls-toggle\"
@@ -359,6 +334,7 @@ HTML_TEMPLATE = Template(
       const tripsData = ${deck_data};
       const timeline = ${timeline};
       const flightsData = ${flights_data};
+      const safeMode = ${safe_mode};
       const initialViewState = ${initial_view_state};
       const mapStyles = ${map_styles};
       const defaultStyleKey = "${map_style}";
@@ -390,7 +366,18 @@ HTML_TEMPLATE = Template(
       const controlsToggle = document.getElementById('controls-toggle');
       const flightsToggle = document.getElementById('flights-toggle');
 
-      state.speedFactor = Number(speedSelect.value);
+      if (speedSelect) {
+        state.speedFactor = Number(speedSelect.value);
+      }
+
+      if (safeMode) {
+        state.exploration = true;
+        state.currentTime = timeline.duration;
+        state.trailLength = timeline.duration;
+        state.playing = false;
+        state.showFlights = false;
+        state.rainbow = false;
+      }
 
       const dragState = {
         pointerId: null,
@@ -568,7 +555,9 @@ HTML_TEMPLATE = Template(
 
       window.addEventListener('resize', () => {
         ensurePositionWithinBounds();
-        autoSizeSelect(speedSelect);
+        if (speedSelect) {
+          autoSizeSelect(speedSelect);
+        }
         autoSizeSelect(basemapSelect);
       });
 
@@ -627,11 +616,17 @@ HTML_TEMPLATE = Template(
       const initialMapStyle =
         mapStyles[basemapSelect.value] || mapStyles[defaultStyleKey] || Object.values(mapStyles)[0];
 
-      slider.max = timeline.duration;
-      slider.step = Math.max(60, Math.floor(timeline.duration / 1000));
-      slider.value = 0;
-      trailSlider.value = 1;
-      timeInput.value = formatTime(timeline.start + state.currentTime);
+      if (slider) {
+        slider.max = timeline.duration;
+        slider.step = Math.max(60, Math.floor(timeline.duration / 1000));
+        slider.value = safeMode ? timeline.duration : 0;
+      }
+      if (trailSlider) {
+        trailSlider.value = 1;
+      }
+      if (timeInput) {
+        timeInput.value = formatTime(timeline.start + state.currentTime);
+      }
 
       const deckgl = new deck.DeckGL({
         container: 'deck-container',
@@ -745,7 +740,7 @@ HTML_TEMPLATE = Template(
       }
 
       function createLayers() {
-        if (state.showFlights) {
+        if (!safeMode && state.showFlights) {
           const flightsLayer = new deck.ArcLayer({
             id: 'flights',
             data: flightsData,
@@ -758,6 +753,18 @@ HTML_TEMPLATE = Template(
             pickable: false,
           });
           return [flightsLayer];
+        }
+        if (safeMode) {
+          const pathLayer = new deck.PathLayer({
+            id: 'coarse-paths',
+            data: tripsData,
+            getPath: (d) => d.path,
+            getColor: (d) => Array.isArray(d.color) ? d.color : [55, 114, 255],
+            widthScale: 1,
+            widthMinPixels: 4,
+            rounded: true,
+          });
+          return [pathLayer];
         }
         const trailLength = state.exploration ? timeline.duration : state.trailLength;
         const activeTrips = getActiveTripsData();
@@ -814,20 +821,37 @@ HTML_TEMPLATE = Template(
 
       function render() {
         deckgl.setProps({ layers: createLayers() });
-        slider.value = state.currentTime;
-        timeInput.value = formatTime(timeline.start + state.currentTime);
-        trailSlider.disabled = state.exploration || state.showFlights;
-        slider.disabled = state.showFlights;
-        explorationToggle.classList.toggle('active', state.exploration);
-        explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
-        paletteToggle.classList.toggle('active', state.rainbow);
-        paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
-        paletteToggle.textContent = '🌈';
-        paletteToggle.setAttribute('aria-label', 'Toggle rainbow palette');
-        flightsToggle.classList.toggle('active', state.showFlights);
-        flightsToggle.setAttribute('aria-pressed', state.showFlights ? 'true' : 'false');
+        if (slider) {
+          slider.value = state.currentTime;
+          slider.disabled = state.showFlights;
+        }
+        if (timeInput) {
+          timeInput.value = formatTime(timeline.start + state.currentTime);
+        }
+        if (safeMode) {
+          state.showFlights = false;
+        }
+        if (trailSlider) {
+          trailSlider.disabled = state.exploration || state.showFlights;
+        }
+        if (explorationToggle) {
+          explorationToggle.classList.toggle('active', state.exploration);
+          explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
+        }
+        if (paletteToggle) {
+          paletteToggle.classList.toggle('active', state.rainbow);
+          paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
+          paletteToggle.textContent = '🌈';
+          paletteToggle.setAttribute('aria-label', 'Toggle rainbow palette');
+        }
+        if (flightsToggle) {
+          flightsToggle.classList.toggle('active', state.showFlights);
+          flightsToggle.setAttribute('aria-pressed', state.showFlights ? 'true' : 'false');
+        }
         document.body.classList.toggle('rainbow-active', state.rainbow);
-        autoSizeSelect(speedSelect);
+        if (speedSelect) {
+          autoSizeSelect(speedSelect);
+        }
         autoSizeSelect(basemapSelect);
         updateControlsDisplay();
       }
@@ -863,29 +887,31 @@ HTML_TEMPLATE = Template(
         render();
       }
 
-      timeInput.addEventListener('focus', () => {
-        timeInput.select();
-        if (state.playing) {
-          state.playing = false;
-          playToggle.textContent = 'Play';
-          state.lastFrameTs = null;
-        }
-      });
+      if (timeInput) {
+        timeInput.addEventListener('focus', () => {
+          timeInput.select();
+          if (state.playing) {
+            state.playing = false;
+            playToggle.textContent = 'Play';
+            state.lastFrameTs = null;
+          }
+        });
 
-      timeInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        timeInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            commitTimeInput(event.target.value);
+            event.preventDefault();
+          } else if (event.key === 'Escape') {
+            render();
+            event.preventDefault();
+            timeInput.blur();
+          }
+        });
+
+        timeInput.addEventListener('blur', (event) => {
           commitTimeInput(event.target.value);
-          event.preventDefault();
-        } else if (event.key === 'Escape') {
-          render();
-          event.preventDefault();
-          timeInput.blur();
-        }
-      });
-
-      timeInput.addEventListener('blur', (event) => {
-        commitTimeInput(event.target.value);
-      });
+        });
+      }
 
       function stepAnimation(timestamp) {
         if (!state.playing) {
@@ -911,46 +937,58 @@ HTML_TEMPLATE = Template(
         }
       }
 
-      playToggle.addEventListener('click', () => {
-        state.playing = !state.playing;
-        playToggle.textContent = state.playing ? 'Pause' : 'Play';
-        state.lastFrameTs = null;
-        if (state.playing) {
-          requestAnimationFrame(stepAnimation);
-        }
-      });
+      if (playToggle) {
+        playToggle.addEventListener('click', () => {
+          state.playing = !state.playing;
+          playToggle.textContent = state.playing ? 'Pause' : 'Play';
+          state.lastFrameTs = null;
+          if (state.playing) {
+            requestAnimationFrame(stepAnimation);
+          }
+        });
+      }
 
-      slider.addEventListener('input', (event) => {
-        state.currentTime = Number(event.target.value);
-        render();
-      });
+      if (slider) {
+        slider.addEventListener('input', (event) => {
+          state.currentTime = Number(event.target.value);
+          render();
+        });
+      }
 
-      trailSlider.addEventListener('input', (event) => {
-        const hours = Number(event.target.value);
-        state.trailLength = Math.max(3600, hours * 3600);
-        render();
-      });
+      if (trailSlider) {
+        trailSlider.addEventListener('input', (event) => {
+          const hours = Number(event.target.value);
+          state.trailLength = Math.max(3600, hours * 3600);
+          render();
+        });
+      }
 
-      speedSelect.addEventListener('change', (event) => {
-        state.speedFactor = Number(event.target.value);
-        autoSizeSelect(speedSelect);
-      });
+      if (speedSelect) {
+        speedSelect.addEventListener('change', (event) => {
+          state.speedFactor = Number(event.target.value);
+          autoSizeSelect(speedSelect);
+        });
+      }
 
-      explorationToggle.addEventListener('click', () => {
-        state.exploration = !state.exploration;
-        if (state.exploration) {
-          state.trailLength = timeline.duration;
-        }
-        render();
-      });
+      if (explorationToggle) {
+        explorationToggle.addEventListener('click', () => {
+          state.exploration = !state.exploration;
+          if (state.exploration) {
+            state.trailLength = timeline.duration;
+          }
+          render();
+        });
+      }
 
-      paletteToggle.addEventListener('click', () => {
-        state.rainbow = !state.rainbow;
-        if (!state.rainbow) {
-          rainbowTripsCache = null;
-        }
-        render();
-      });
+      if (paletteToggle) {
+        paletteToggle.addEventListener('click', () => {
+          state.rainbow = !state.rainbow;
+          if (!state.rainbow) {
+            rainbowTripsCache = null;
+          }
+          render();
+        });
+      }
 
       basemapSelect.addEventListener('change', (event) => {
         const styleKey = event.target.value;
@@ -964,17 +1002,21 @@ HTML_TEMPLATE = Template(
         autoSizeSelect(basemapSelect);
       });
 
-      flightsToggle.addEventListener('click', () => {
-        state.showFlights = !state.showFlights;
-        if (state.showFlights && state.playing) {
-          state.playing = false;
-          playToggle.textContent = 'Play';
-          state.lastFrameTs = null;
-        }
-        render();
-      });
+      if (flightsToggle && !safeMode) {
+        flightsToggle.addEventListener('click', () => {
+          state.showFlights = !state.showFlights;
+          if (state.showFlights && state.playing) {
+            state.playing = false;
+            playToggle.textContent = 'Play';
+            state.lastFrameTs = null;
+          }
+          render();
+        });
+      }
 
-      autoSizeSelect(speedSelect);
+      if (speedSelect) {
+        autoSizeSelect(speedSelect);
+      }
       autoSizeSelect(basemapSelect);
       render();
     </script>
@@ -994,18 +1036,93 @@ def render_html(
     timespan: str,
     distance_km: int,
     flights_data: List[dict],
+    safe_mode: bool,
 ) -> str:
+    country_count = len(stats.countries) if stats else 0
+    us_state_count = len(stats.us_states) if stats else 0
+    region_count = sum(len(group.regions) for group in stats.region_groups) if stats else 0
+
+    stats_parts = [
+        f"{country_count} countries",
+        f"{us_state_count} US states",
+        f"{region_count} regions",
+        f"Points: {point_count}",
+    ]
+    if not safe_mode:
+        stats_parts.append(f"T-Span: {timespan}")
+    stats_parts.append(f"D-Span: {distance_km} km")
+    stats_inline = '        <span class="stats-inline">' + " · ".join(stats_parts) + "</span>\n"
+
+    play_toggle_control = (
+        '        <button id="play-toggle" class="primary" type="button">Play</button>\n'
+    ) if not safe_mode else ""
+
+    explore_toggle_control = (
+        '        <button id="exploration-toggle" class="ghost" type="button">Explore</button>\n'
+    ) if not safe_mode else ""
+
+    time_input_control = (
+        '        <input id="time-input" type="text" inputmode="numeric" autocomplete="off" '
+        'spellcheck="false" aria-label="Current timestamp" />\n'
+    ) if not safe_mode else ""
+
+    speed_select_control = (
+        '        <select id="speed-select" class="pill-select" aria-label="Playback speed">\n'
+        '          <option value="60">1 min/s</option>\n'
+        '          <option value="300" selected>5 min/s</option>\n'
+        '          <option value="600">10 min/s</option>\n'
+        '          <option value="1200">20 min/s</option>\n'
+        '          <option value="3000">50 min/s</option>\n'
+        '          <option value="6000">100 min/s</option>\n'
+        '          <option value="30000">500 min/s</option>\n'
+        '          <option value="60000">1000 min/s</option>\n'
+        '        </select>\n'
+    ) if not safe_mode else ""
+
+    palette_toggle_control = (
+        '        <button id="palette-toggle" class="ghost" type="button" aria-pressed="false" '
+        'aria-label="Toggle rainbow palette">\n'
+        '          🌈\n'
+        '        </button>\n'
+    ) if not safe_mode else ""
+
+    flights_toggle_control = (
+        '        <button id="flights-toggle" class="ghost" type="button" aria-pressed="false" '
+        'aria-label="Toggle flight routes">\n'
+        '          ✈️\n'
+        '        </button>\n'
+    ) if not safe_mode else ""
+
+    timeline_section = (
+        '      <section class="controls-row row-timeline">\n'
+        '        <label class="slider-label" for="time-slider">Timeline</label>\n'
+        '        <input id="time-slider" type="range" min="0" max="1" step="60" value="0" />\n'
+        '      </section>\n'
+    ) if not safe_mode else ""
+
+    trail_section = (
+        '      <section class="controls-row row-trail">\n'
+        '        <label class="slider-label" for="trail-slider">Trail length (hours)</label>\n'
+        '        <input id="trail-slider" type="range" min="1" max="48" step="1" value="1" />\n'
+        '      </section>\n'
+    ) if not safe_mode else ""
+
     return HTML_TEMPLATE.substitute(
         deck_data=json.dumps(data, ensure_ascii=False),
         timeline=json.dumps(timeline, ensure_ascii=False),
         initial_view_state=json.dumps(initial_view_state, ensure_ascii=False),
-        country_count=len(stats.countries) if stats else 0,
-        us_state_count=len(stats.us_states) if stats else 0,
-        region_count=sum(len(group.regions) for group in stats.region_groups) if stats else 0,
-        point_count=point_count,
         map_style=map_style,
         map_styles=json.dumps(MAP_STYLES, ensure_ascii=False),
-        timespan=timespan,
         distance_km=distance_km,
         flights_data=json.dumps(flights_data, ensure_ascii=False),
+        safe_mode="true" if safe_mode else "false",
+        play_toggle_control=play_toggle_control,
+        explore_toggle_control=explore_toggle_control,
+        time_input_control=time_input_control,
+        speed_select_control=speed_select_control,
+        palette_toggle_control=palette_toggle_control,
+        flights_toggle_control=flights_toggle_control,
+        timeline_section=timeline_section,
+        trail_section=trail_section,
+        stats_inline=stats_inline,
     )
