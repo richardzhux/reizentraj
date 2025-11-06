@@ -124,12 +124,7 @@ def build_segments(
 
     segments_coords: List[List[Coordinate]] = []
     current_segment: List[Coordinate] = []
-    flight_min_distance_km = 100.0
-    flights: List[Tuple[Coordinate, Coordinate]] = [
-        (coord_list[idx], coord_list[idx + 1])
-        for idx in break_indices
-        if idx + 1 < len(coord_list) and distances[idx] >= flight_min_distance_km
-    ]
+    flights: List[Tuple[Coordinate, Coordinate]] = []
 
     for keep, coord in zip(mask, coord_list):
         if keep:
@@ -141,6 +136,19 @@ def build_segments(
 
     if len(current_segment) > 1:
         segments_coords.append(current_segment)
+
+    def in_contiguous_us(coordinate: Coordinate) -> bool:
+        return 24.5 <= coordinate.latitude <= 49.5 and -125.0 <= coordinate.longitude <= -66.0
+
+    for idx in break_indices:
+        if idx + 1 >= len(coord_list):
+            continue
+        origin = coord_list[idx]
+        dest = coord_list[idx + 1]
+        distance_km = distances[idx]
+        threshold = 230.0 if in_contiguous_us(origin) and in_contiguous_us(dest) else 100.0
+        if distance_km >= threshold:
+            flights.append((origin, dest))
 
     segments = [LineString([coord.as_lonlat for coord in segment]) for segment in segments_coords]
     return segments, segments_coords, flights
