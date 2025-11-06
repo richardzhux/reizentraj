@@ -326,14 +326,16 @@ HTML_TEMPLATE = Template(
         display: inline-block;
         font-feature-settings: "tnum";
         font-variant-numeric: tabular-nums;
-        padding: 10px 18px;
+        padding: 8px 14px;
         border-radius: 999px;
         background: rgba(148, 163, 184, 0.22);
         box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
         border: none;
         color: #f1f5f9;
         font-size: 0.95rem;
-        min-width: 210px;
+        min-width: 160px;
+        width: auto;
+        max-width: 100%;
         text-align: center;
       }
       #time-input:focus {
@@ -346,11 +348,13 @@ HTML_TEMPLATE = Template(
         border-radius: 999px;
         background: rgba(148, 163, 184, 0.18);
         color: #f8fafc;
-        padding: 10px 18px;
+        padding: 8px 14px;
         border: none;
         box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
         font-weight: 600;
         cursor: pointer;
+        width: auto;
+        min-width: 0;
       }
       .pill-select:focus {
         outline: 2px solid rgba(56, 189, 248, 0.65);
@@ -374,7 +378,7 @@ HTML_TEMPLATE = Template(
       </div>
       <section class=\"controls-row row-top\">
         <button id=\"play-toggle\" class=\"primary\" type=\"button\">Play</button>
-        <button id=\"exploration-toggle\" class=\"ghost\" type=\"button\">Exploration mode</button>
+        <button id=\"exploration-toggle\" class=\"ghost\" type=\"button\">Explore</button>
         <input id="time-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Current timestamp" />
         <select id="speed-select" class="pill-select" aria-label="Playback speed">
           <option value="60">1 min/s</option>
@@ -386,7 +390,15 @@ HTML_TEMPLATE = Template(
           <option value="30000">500 min/s</option>
           <option value="60000">1000 min/s</option>
         </select>
-        <button id="palette-toggle" class="ghost" type="button" aria-pressed="false">Rainbow palette</button>
+        <button
+          id="palette-toggle"
+          class="ghost"
+          type="button"
+          aria-pressed="false"
+          aria-label="Switch to rainbow palette"
+        >
+          🌈
+        </button>
         <select id="basemap-select" class="pill-select" aria-label="Basemap style">
           <option value="Voyager" selected>Voyager</option>
           <option value="Positron">Positron</option>
@@ -453,8 +465,218 @@ HTML_TEMPLATE = Template(
       const speedSelect = document.getElementById('speed-select');
       const paletteToggle = document.getElementById('palette-toggle');
       const basemapSelect = document.getElementById('basemap-select');
+      const controlsContainer = document.getElementById('controls');
+      const controlsHeader = document.getElementById('controls-header');
+      const collapseButton = document.getElementById('controls-collapse');
+      const controlsToggle = document.getElementById('controls-toggle');
 
       state.speedFactor = Number(speedSelect.value);
+
+      const dragState = {
+        pointerId: null,
+        offsetX: 0,
+        offsetY: 0,
+        targetElement: null,
+        moved: false,
+      };
+      let suppressCollapsedClick = false;
+      const selectMeasureCanvas = document.createElement('canvas');
+      const selectMeasureContext = selectMeasureCanvas.getContext('2d');
+
+      function getActiveFloatingElement() {
+        return state.controlsCollapsed ? controlsToggle : controlsContainer;
+      }
+
+      function clampToViewport(left, top, element) {
+        const margin = 8;
+        const rect = element.getBoundingClientRect();
+        const width = rect.width || element.offsetWidth || 0;
+        const height = rect.height || element.offsetHeight || 0;
+        const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+        const maxTop = Math.max(margin, window.innerHeight - height - margin);
+        return {
+          left: Math.min(Math.max(left, margin), maxLeft),
+          top: Math.min(Math.max(top, margin), maxTop),
+        };
+      }
+
+      function applyControlsPosition() {
+        const targets = [controlsContainer, controlsToggle];
+        if (state.controlsPosition) {
+          const { left, top } = state.controlsPosition;
+          for (const element of targets) {
+            element.style.left = left + 'px';
+            element.style.top = top + 'px';
+            element.classList.add('custom-position');
+          }
+        } else {
+          for (const element of targets) {
+            element.style.left = '';
+            element.style.top = '';
+            element.classList.remove('custom-position');
+          }
+        }
+      }
+
+      function ensurePositionWithinBounds(targetElement) {
+        if (!state.controlsPosition) {
+          return;
+        }
+        const element = targetElement || getActiveFloatingElement();
+        if (!element) {
+          return;
+        }
+        const clamped = clampToViewport(state.controlsPosition.left, state.controlsPosition.top, element);
+        if (clamped.left !== state.controlsPosition.left || clamped.top !== state.controlsPosition.top) {
+          state.controlsPosition = clamped;
+          applyControlsPosition();
+        }
+      }
+
+      function updateControlsDisplay() {
+        const expanded = !state.controlsCollapsed;
+        controlsContainer.hidden = !expanded;
+        controlsToggle.hidden = expanded;
+        const ariaExpanded = expanded ? 'true' : 'false';
+        collapseButton.setAttribute('aria-expanded', ariaExpanded);
+        controlsToggle.setAttribute('aria-expanded', ariaExpanded);
+        applyControlsPosition();
+      }
+
+      function attachDrag(handle, resolveTarget) {
+        if (!handle) {
+          return;
+        }
+        handle.addEventListener('pointerdown', (event) => {
+          if (event.button !== 0) {
+            return;
+          }
+          if (handle === controlsHeader) {
+            const interactive = event.target.closest(
+              'button, input, select, textarea, label, option, a, [role="button"]'
+            );
+            if (interactive) {
+              return;
+            }
+          }
+          const target = resolveTarget();
+          if (!target) {
+            return;
+          }
+          dragState.pointerId = event.pointerId;
+          dragState.targetElement = target;
+          const rect = target.getBoundingClientRect();
+          dragState.offsetX = event.clientX - rect.left;
+          dragState.offsetY = event.clientY - rect.top;
+          dragState.moved = false;
+          if (handle === controlsToggle) {
+            suppressCollapsedClick = false;
+          }
+          event.preventDefault();
+          handle.setPointerCapture(event.pointerId);
+          document.body.classList.add('controls-dragging');
+          if (handle === controlsHeader) {
+            handle.classList.add('dragging');
+          }
+        });
+
+        handle.addEventListener('pointermove', (event) => {
+          if (event.pointerId !== dragState.pointerId || !dragState.targetElement) {
+            return;
+          }
+          dragState.moved = true;
+          const target = dragState.targetElement;
+          const desiredLeft = event.clientX - dragState.offsetX;
+          const desiredTop = event.clientY - dragState.offsetY;
+          state.controlsPosition = clampToViewport(desiredLeft, desiredTop, target);
+          applyControlsPosition();
+        });
+
+        function endDrag(event) {
+          if (event.pointerId !== dragState.pointerId) {
+            return;
+          }
+          if (typeof handle.hasPointerCapture === 'function' && handle.hasPointerCapture(event.pointerId)) {
+            handle.releasePointerCapture(event.pointerId);
+          }
+          if (handle === controlsHeader) {
+            handle.classList.remove('dragging');
+          }
+          document.body.classList.remove('controls-dragging');
+          if (dragState.moved && handle === controlsToggle) {
+            suppressCollapsedClick = true;
+          }
+          dragState.pointerId = null;
+          dragState.targetElement = null;
+          dragState.moved = false;
+          if (state.controlsPosition) {
+            ensurePositionWithinBounds();
+          }
+        }
+
+        handle.addEventListener('pointerup', endDrag);
+        handle.addEventListener('pointercancel', endDrag);
+      }
+
+      attachDrag(controlsHeader, () => controlsContainer);
+      attachDrag(controlsToggle, () => controlsToggle);
+
+      function autoSizeSelect(select) {
+        if (!select || !selectMeasureContext) {
+          return;
+        }
+        const option = select.options[select.selectedIndex];
+        const label = option ? option.textContent : '';
+        const computed = window.getComputedStyle(select);
+        const font =
+          computed.font ||
+          [computed.fontWeight, computed.fontSize, computed.fontFamily].filter(Boolean).join(' ').trim();
+        if (font && font.trim()) {
+          selectMeasureContext.font = font;
+        }
+        const metrics = selectMeasureContext.measureText(label);
+        const paddingLeft = parseFloat(computed.paddingLeft || '0') || 0;
+        const paddingRight = parseFloat(computed.paddingRight || '0') || 0;
+        const borderLeft = parseFloat(computed.borderLeftWidth || '0') || 0;
+        const borderRight = parseFloat(computed.borderRightWidth || '0') || 0;
+        const arrowAllowance = 18;
+        const width = Math.ceil(
+          metrics.width + paddingLeft + paddingRight + borderLeft + borderRight + arrowAllowance
+        );
+        select.style.width = width + 'px';
+      }
+
+      window.addEventListener('resize', () => {
+        ensurePositionWithinBounds();
+        autoSizeSelect(speedSelect);
+        autoSizeSelect(basemapSelect);
+      });
+
+      collapseButton.addEventListener('click', () => {
+        if (state.controlsCollapsed) {
+          return;
+        }
+        state.controlsCollapsed = true;
+        render();
+        ensurePositionWithinBounds(controlsToggle);
+        controlsToggle.focus();
+      });
+
+      controlsToggle.addEventListener('click', (event) => {
+        if (suppressCollapsedClick) {
+          suppressCollapsedClick = false;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!state.controlsCollapsed) {
+          return;
+        }
+        state.controlsCollapsed = false;
+        render();
+        ensurePositionWithinBounds(controlsContainer);
+        playToggle.focus();
+      });
 
       const rainbowStops = [
         { t: 0.0, color: [239, 68, 68] }, // red
@@ -502,7 +724,7 @@ HTML_TEMPLATE = Template(
 
       function formatTime(epochSeconds) {
         const dt = new Date(epochSeconds * 1000);
-        return dt.toISOString().replace('T', ' ').substring(0, 19);
+        return dt.toISOString().replace('T', ' ').substring(0, 16);
       }
 
       function formatHours(seconds) {
@@ -665,8 +887,15 @@ HTML_TEMPLATE = Template(
         explorationToggle.setAttribute('aria-pressed', state.exploration ? 'true' : 'false');
         paletteToggle.classList.toggle('active', state.rainbow);
         paletteToggle.setAttribute('aria-pressed', state.rainbow ? 'true' : 'false');
-        paletteToggle.textContent = state.rainbow ? 'Classic palette' : 'Rainbow palette';
+        paletteToggle.textContent = state.rainbow ? 'Classic palette' : '🌈';
+        paletteToggle.setAttribute(
+          'aria-label',
+          state.rainbow ? 'Switch to classic palette' : 'Switch to rainbow palette'
+        );
         document.body.classList.toggle('rainbow-active', state.rainbow);
+        autoSizeSelect(speedSelect);
+        autoSizeSelect(basemapSelect);
+        updateControlsDisplay();
       }
 
       function parseInputTimestamp(value) {
@@ -770,6 +999,7 @@ HTML_TEMPLATE = Template(
 
       speedSelect.addEventListener('change', (event) => {
         state.speedFactor = Number(event.target.value);
+        autoSizeSelect(speedSelect);
       });
 
       explorationToggle.addEventListener('click', () => {
@@ -797,8 +1027,11 @@ HTML_TEMPLATE = Template(
         if (styleUrl) {
           deckgl.setProps({ mapStyle: styleUrl });
         }
+        autoSizeSelect(basemapSelect);
       });
 
+      autoSizeSelect(speedSelect);
+      autoSizeSelect(basemapSelect);
       render();
     </script>
   </body>
