@@ -38,7 +38,7 @@ Generate an interactive trajectory explorer by pointing the script at your Takeo
 python3 trajectory.py --input "/path/to/Takeout/Records.json"
 ```
 
-If you omit `--input`, the script offers the bundled `nov5.json` or prompts for your own export. A date-range prompt appears next; press **Enter** to accept the detected bounds or pre-fill them with `--start-date` / `--end-date`. Add `--no-prompt` whenever you want a fully non-interactive run.
+A date-range prompt appears next; press **Enter** to accept the detected bounds or pre-fill them with `--start-date` / `--end-date`. Add `--no-prompt` whenever you want a fully non-interactive run.
 
 Common CLI options (available in both deck.gl and Folium builds):
 - `--output`: destination HTML file. Defaults to `trajectory_map.html`.
