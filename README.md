@@ -1,6 +1,7 @@
 # reizentraj
 
 Interactive trajectory tools for visualising Google Takeout location history.
+The name “reizentraj” nods to my Dutch lessons with a beloved Northwestern professor—combining *reizen* (“to travel”) with “trajectory.”
 
 ## Overview
 - `trajectory.py` builds a high-performance deck.gl + MapLibre explorer. It renders animated trips with a timeline slider, play/pause controls, exploration (cumulative) mode, and the signature pig-head marker. Use it when you want the richer UI and WebGL rendering.
