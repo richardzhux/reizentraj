@@ -265,6 +265,12 @@ HTML_TEMPLATE = Template(
       }
       #controls .row-top {
         justify-content: flex-start;
+        flex-wrap: nowrap;
+        gap: 10px;
+        overflow: visible;
+      }
+      #controls .row-top > :not(.stats-inline) {
+        flex: 0 0 auto;
       }
       .stats-inline {
         font-size: 0.85rem;
@@ -343,14 +349,14 @@ HTML_TEMPLATE = Template(
         display: inline-block;
         font-feature-settings: "tnum";
         font-variant-numeric: tabular-nums;
-        padding: 8px 14px;
+        padding: 8px 12px;
         border-radius: 999px;
         background: rgba(148, 163, 184, 0.22);
         box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
         border: none;
         color: #f1f5f9;
-        font-size: 0.95rem;
-        min-width: 160px;
+        font-size: 0.9rem;
+        min-width: 140px;
         width: auto;
         max-width: 100%;
         text-align: center;
@@ -365,13 +371,18 @@ HTML_TEMPLATE = Template(
         border-radius: 999px;
         background: rgba(148, 163, 184, 0.18);
         color: #f8fafc;
-        padding: 8px 14px;
+        padding: 8px 12px;
         border: none;
         box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
         font-weight: 600;
         cursor: pointer;
         width: auto;
-        min-width: 0;
+        min-width: 110px;
+        font-size: 0.9rem;
+        text-align: center;
+        text-align-last: center;
+        -moz-text-align-last: center;
+        white-space: nowrap;
       }
       .pill-select:focus {
         outline: 2px solid rgba(56, 189, 248, 0.65);
@@ -494,8 +505,6 @@ $timeline_section$trail_section
         moved: false,
       };
       let suppressCollapsedClick = false;
-      const selectMeasureCanvas = document.createElement('canvas');
-      const selectMeasureContext = selectMeasureCanvas.getContext('2d');
 
       function getActiveFloatingElement() {
         return state.controlsCollapsed ? controlsToggle : controlsContainer;
@@ -635,37 +644,8 @@ $timeline_section$trail_section
       attachDrag(controlsHeader, () => controlsContainer);
       attachDrag(controlsToggle, () => controlsToggle);
 
-      function autoSizeSelect(select) {
-        if (!select || !selectMeasureContext) {
-          return;
-        }
-        const option = select.options[select.selectedIndex];
-        const label = option ? option.textContent : '';
-        const computed = window.getComputedStyle(select);
-        const font =
-          computed.font ||
-          [computed.fontWeight, computed.fontSize, computed.fontFamily].filter(Boolean).join(' ').trim();
-        if (font && font.trim()) {
-          selectMeasureContext.font = font;
-        }
-        const metrics = selectMeasureContext.measureText(label);
-        const paddingLeft = parseFloat(computed.paddingLeft || '0') || 0;
-        const paddingRight = parseFloat(computed.paddingRight || '0') || 0;
-        const borderLeft = parseFloat(computed.borderLeftWidth || '0') || 0;
-        const borderRight = parseFloat(computed.borderRightWidth || '0') || 0;
-        const arrowAllowance = 18;
-        const width = Math.ceil(
-          metrics.width + paddingLeft + paddingRight + borderLeft + borderRight + arrowAllowance
-        );
-        select.style.width = width + 'px';
-      }
-
       window.addEventListener('resize', () => {
         ensurePositionWithinBounds();
-        if (speedSelect) {
-          autoSizeSelect(speedSelect);
-        }
-        autoSizeSelect(basemapSelect);
       });
 
       collapseButton.addEventListener('click', () => {
@@ -1012,10 +992,6 @@ $timeline_section$trail_section
           flightsToggle.setAttribute('aria-pressed', state.showFlights ? 'true' : 'false');
         }
         document.body.classList.toggle('rainbow-active', state.rainbow);
-        if (speedSelect) {
-          autoSizeSelect(speedSelect);
-        }
-        autoSizeSelect(basemapSelect);
         updateControlsDisplay();
       }
 
@@ -1141,7 +1117,6 @@ $timeline_section$trail_section
       if (speedSelect) {
         speedSelect.addEventListener('change', (event) => {
           state.speedFactor = Number(event.target.value);
-          autoSizeSelect(speedSelect);
         });
       }
 
@@ -1174,7 +1149,6 @@ $timeline_section$trail_section
         if (styleUrl) {
           deckgl.setProps({ mapStyle: styleUrl });
         }
-        autoSizeSelect(basemapSelect);
       });
 
       if (flightsToggle && !safeMode) {
@@ -1208,10 +1182,6 @@ $timeline_section$trail_section
         }
       });
 
-      if (speedSelect) {
-        autoSizeSelect(speedSelect);
-      }
-      autoSizeSelect(basemapSelect);
       render();
     </script>
   </body>
