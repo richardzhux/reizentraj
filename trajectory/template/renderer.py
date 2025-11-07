@@ -179,7 +179,7 @@ HTML_TEMPLATE = Template(
         margin: 0;
         letter-spacing: 0.02em;
       }
-      #controls button {
+      #controls button:not(.stat-line-button) {
         font-size: 0.9rem;
         border-radius: 999px;
         border: none;
