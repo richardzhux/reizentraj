@@ -79,7 +79,7 @@ raw GPS points
 ```
 
 - **Local-day buckets:** Records are grouped by the date in your local timezone to respect your travel days rather than UTC midnight boundaries.
-- **Windowed averaging:** Each day’s track is broken into fixed windows of 10 points; every window collapses to the mean latitude/longitude so a neighborhood block no longer retains its exact path.
+- **Windowed averaging:** Each day’s track is broken into fixed windows of 5 points; every window collapses to the mean latitude/longitude so a neighborhood block no longer retains its exact path.
 - **Anchor smoothing:** If a day has ≥3 anchors we run up to a cubic fit (degree min(3, anchors−1)) across normalized time; days with 2 anchors fall back to interpolation, and single-anchor days flatten to a point. This keeps long days smooth without re-introducing fine-grained stops.
 - **Sample density:** We now emit at least 10 evenly spaced samples per day (or more if anchors demand it) so curved trips render smoothly despite the heavy averaging.
 - **Cross-day bridges:** When consecutive days finish and start within 150 km, we insert interpolated bridge points to avoid visually broken road trips while still honoring the per-day timestamps.
@@ -87,7 +87,7 @@ raw GPS points
 
 **Impact trade-offs**
 
-- Increasing the window size or injecting random jitter does the most to hide precise venues; we currently keep the 10-point window and rely on the polynomial/jitter-free curve for readability. If you ever need stronger obfuscation, enlarging that window (or adding noise) is the lever that best blurs “where I stayed / ate,” at the cost of more abstraction.
+- Increasing the window size or injecting random jitter does the most to hide precise venues; we currently keep the 5-point window and rely on the polynomial/jitter-free curve for readability. If you ever need stronger obfuscation, enlarging that window (or adding noise) is the lever that best blurs “where I stayed / ate,” at the cost of more abstraction.
 - Raising sample counts, introducing cubic fits, and stitching days do **not** make it easier to re-identify locations—they only smooth the rendered lines so the abstracted path looks less jagged.
 - Because every safeguard happens before the renderer is called, the published HTML carries only the coarsened coordinates and no timing metadata, regardless of browser tooling.
 - Once you choose coarsening, every downstream step—stats, distance, map—is computed from the coarsened coordinates only. We never keep the raw points around after that step. Think “what you see is what you get”: for example, if you drove on a roadtrip from Chicago to Boston via I-95, the fitted curve can dip across the Canadian border.  The stats calculator will therefore claim a Canada visit even if the real trip never crossed it. Same for states/regions and D-span; they’re all derived from the smoothed geometry.
