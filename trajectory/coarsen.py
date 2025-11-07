@@ -107,7 +107,7 @@ def _build_bridge(
 
 def coarsen_coordinates(
     coordinates: Sequence[Coordinate],
-    window_size: int = 10,
+    window_size: int = 5,
     min_samples: int = 10,
     bridge_threshold_km: float = 150.0,
 ) -> List[Coordinate]:
