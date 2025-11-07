@@ -5,7 +5,8 @@ from string import Template
 from typing import List
 
 from ..constants import MAP_STYLES
-from ..models import LocationStats
+from ..models import LocationStats, RegionGroup, RegionVisit
+from ..time_utils import isoformat_local
 
 HTML_TEMPLATE = Template(
     """<!DOCTYPE html>
@@ -49,6 +50,97 @@ HTML_TEMPLATE = Template(
       body.controls-dragging {
         user-select: none;
         cursor: grabbing;
+      }
+      .stat-panel {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+      }
+      .stat-panel[hidden] {
+        display: none !important;
+      }
+      .stat-panel[hidden] {
+        display: none !important;
+      }
+      .stat-panel-content {
+        background: rgba(15, 23, 42, 0.95);
+        border-radius: 16px;
+        width: min(520px, 90vw);
+        max-height: 80vh;
+        box-shadow: 0 20px 40px rgba(2, 6, 23, 0.55);
+        display: flex;
+        flex-direction: column;
+      }
+      .stat-panel-content header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 22px 12px;
+      }
+      .stat-panel-content h2 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+      #stat-panel-close {
+        border: none;
+        background: rgba(148, 163, 184, 0.15);
+        color: #e2e8f0;
+        border-radius: 999px;
+        width: 32px;
+        height: 32px;
+        font-size: 1.2rem;
+        cursor: pointer;
+      }
+      .stat-panel-body {
+        padding: 0 22px 22px;
+        overflow-y: auto;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+      .stat-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .stat-list.numbered {
+        list-style: decimal;
+        padding-left: 1.5rem;
+      }
+      .stat-list li + li {
+        margin-top: 8px;
+      }
+      .region-list {
+        list-style: disc;
+        padding-left: 1.25rem;
+      }
+      .region-list > li {
+        margin-top: 12px;
+      }
+      .region-list ul {
+        list-style: circle;
+        padding-left: 1.25rem;
+        margin-top: 6px;
+      }
+      .stat-line-button {
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline;
+      }
+      .stat-line-button:hover,
+      .stat-line-button:focus-visible {
+        text-decoration: underline;
       }
       #controls {
         background: rgba(15, 23, 42, 0.85);
@@ -327,6 +419,15 @@ $timeline_section$trail_section
       Trajectory explorer
     </button>
     <div id=\"deck-container\"></div>
+    <div id="stat-panel" class="stat-panel" role="dialog" aria-modal="true" hidden>
+      <div class="stat-panel-content">
+        <header>
+          <h2 id="stat-panel-title"></h2>
+          <button type="button" id="stat-panel-close" aria-label="Close stats panel">×</button>
+        </header>
+        <div class="stat-panel-body" id="stat-panel-body" tabindex="0"></div>
+      </div>
+    </div>
 
     <script src=\"https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js\"></script>
     <script src=\"https://unpkg.com/deck.gl@8.9.27/dist.min.js\"></script>
@@ -339,6 +440,7 @@ $timeline_section$trail_section
       const initialViewState = ${initial_view_state};
       const mapStyles = ${map_styles};
       const defaultStyleKey = "${map_style}";
+      const statData = ${stat_data};
 
       const state = {
         currentTime: 0,
@@ -366,6 +468,10 @@ $timeline_section$trail_section
       const collapseButton = document.getElementById('controls-collapse');
       const controlsToggle = document.getElementById('controls-toggle');
       const flightsToggle = document.getElementById('flights-toggle');
+      const statPanel = document.getElementById('stat-panel');
+      const statPanelBody = document.getElementById('stat-panel-body');
+      const statPanelTitle = document.getElementById('stat-panel-title');
+      const statPanelClose = document.getElementById('stat-panel-close');
 
       if (speedSelect) {
         state.speedFactor = Number(speedSelect.value);
@@ -820,6 +926,62 @@ $timeline_section$trail_section
         return seconds;
       }
 
+      function openStatPanel(kind) {
+        if (!statPanel || !statData[kind]) {
+          return;
+        }
+        const titles = {
+          countries: 'Visited countries',
+          states: 'Visited US states',
+          regions: 'Regions by country',
+        };
+        statPanelTitle.textContent = titles[kind] || 'Details';
+        statPanelBody.innerHTML = '';
+        const entries = statData[kind] || [];
+        if (!entries.length) {
+          const empty = document.createElement('p');
+          empty.textContent = 'No data available.';
+          statPanelBody.appendChild(empty);
+        } else if (kind === 'regions') {
+          const list = document.createElement('ul');
+          list.className = 'stat-list region-list';
+          entries.forEach((group) => {
+            const groupItem = document.createElement('li');
+            groupItem.textContent = group.country;
+            if (group.regions && group.regions.length) {
+              const sublist = document.createElement('ul');
+              group.regions.forEach((region) => {
+                const subItem = document.createElement('li');
+                subItem.textContent = region.title + ' — last entry ' + region.last_seen;
+                sublist.appendChild(subItem);
+              });
+              groupItem.appendChild(sublist);
+            }
+            list.appendChild(groupItem);
+          });
+          statPanelBody.appendChild(list);
+        } else {
+          const list = document.createElement('ol');
+          list.className = 'stat-list numbered';
+          entries.forEach((entry) => {
+            const item = document.createElement('li');
+            item.textContent = entry.title + ' — last entry ' + entry.last_seen;
+            list.appendChild(item);
+          });
+          statPanelBody.appendChild(list);
+        }
+        statPanel.hidden = false;
+        if (statPanelClose) {
+          statPanelClose.focus();
+        }
+      }
+
+      function closeStatPanel() {
+        if (statPanel) {
+          statPanel.hidden = true;
+        }
+      }
+
       function render() {
         deckgl.setProps({ layers: createLayers() });
         if (slider) {
@@ -855,6 +1017,18 @@ $timeline_section$trail_section
         }
         autoSizeSelect(basemapSelect);
         updateControlsDisplay();
+      }
+
+      function bindStatButtons() {
+        const buttons = document.querySelectorAll('[data-stat-panel]');
+        buttons.forEach((button) => {
+          button.addEventListener('click', (event) => {
+            const kind = button.dataset.statPanel;
+            if (kind) {
+              openStatPanel(kind);
+            }
+          });
+        });
       }
 
       function parseInputTimestamp(value) {
@@ -1015,6 +1189,25 @@ $timeline_section$trail_section
         });
       }
 
+      bindStatButtons();
+      if (statPanelClose) {
+        statPanelClose.addEventListener('click', () => {
+          closeStatPanel();
+        });
+      }
+      if (statPanel) {
+        statPanel.addEventListener('click', (event) => {
+          if (event.target === statPanel) {
+            closeStatPanel();
+          }
+        });
+      }
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && statPanel && !statPanel.hidden) {
+          closeStatPanel();
+        }
+      });
+
       if (speedSelect) {
         autoSizeSelect(speedSelect);
       }
@@ -1051,15 +1244,27 @@ def render_html(
             f"Points: {point_count}",
             f"D-Span: {distance_km} km",
         ]
-        stats_inline = '        <span class="stats-inline">' + " · ".join(inline_parts) + "</span>\n"
+        stats_inline = (
+            '        <span class="stats-inline">'
+            + " · ".join(
+                [
+                    f'<button class="stat-line-button" data-stat-panel="countries">{inline_parts[0]}</button>',
+                    f'<button class="stat-line-button" data-stat-panel="states">{inline_parts[1]}</button>',
+                    f'<button class="stat-line-button" data-stat-panel="regions">{inline_parts[2]}</button>',
+                    inline_parts[3],
+                    inline_parts[4],
+                ]
+            )
+            + "</span>\n"
+        )
         stats_block = ""
     else:
         stats_inline = ""
         stats_block = (
             "      <div class=\"statline\">\n"
-            f"        <div>{country_count} countries</div>\n"
-            f"        <div>{us_state_count} US states</div>\n"
-            f"        <div>{region_count} regions</div>\n"
+            f"        <div><button class=\"stat-line-button\" data-stat-panel=\"countries\">{country_count} countries</button></div>\n"
+            f"        <div><button class=\"stat-line-button\" data-stat-panel=\"states\">{us_state_count} US states</button></div>\n"
+            f"        <div><button class=\"stat-line-button\" data-stat-panel=\"regions\">{region_count} regions</button></div>\n"
             f"        <div>Points: {point_count}</div>\n"
             f"        <div>T-Span: {timespan}</div>\n"
             f"        <div>D-Span: {distance_km} km</div>\n"
@@ -1120,6 +1325,44 @@ def render_html(
         '      </section>\n'
     ) if not safe_mode else ""
 
+    def format_country_payload(visit: RegionVisit) -> dict:
+        return {
+            "title": f"{visit.label} ({visit.identifier})",
+            "last_seen": isoformat_local(visit.last_seen),
+        }
+
+    def format_state_payload(visit: RegionVisit) -> dict:
+        return {
+            "title": visit.label,
+            "last_seen": isoformat_local(visit.last_seen),
+        }
+
+    countries_entries = [format_country_payload(visit) for visit in stats.countries]
+    states_entries = [format_state_payload(visit) for visit in stats.us_states]
+    region_entries: List[dict] = []
+    for group in stats.region_groups:
+        region_entries.append(
+            {
+                "country": f"{group.country_label} ({group.country_code})",
+                "regions": [
+                    {
+                        "title": visit.label,
+                        "last_seen": isoformat_local(visit.last_seen),
+                    }
+                    for visit in group.regions
+                ],
+            }
+        )
+
+    stat_payload = json.dumps(
+        {
+            "countries": countries_entries,
+            "states": states_entries,
+            "regions": region_entries,
+        },
+        ensure_ascii=False,
+    )
+
     return HTML_TEMPLATE.substitute(
         deck_data=json.dumps(data, ensure_ascii=False),
         timeline=json.dumps(timeline, ensure_ascii=False),
@@ -1139,4 +1382,5 @@ def render_html(
         trail_section=trail_section,
         stats_inline=stats_inline,
         stats_block=stats_block,
+        stat_data=stat_payload,
     )
